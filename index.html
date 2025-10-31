@@ -1,63 +1,135 @@
-<section style="padding:30px;">
-  <h2>📁 CSV Files from Repository</h2>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebExcel Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: url('https://images.unsplash.com/photo-1522205408450-add114ad53fe?auto=format&fit=crop&w=1350&q=80') center/cover no-repeat;
+      backdrop-filter: blur(6px);
+      color: #222;
+      margin: 0;
+      padding: 40px;
+    }
+    section {
+      background-color: rgba(255,255,255,0.85);
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      margin-bottom: 40px;
+      padding: 20px;
+    }
+    summary {
+      cursor: pointer;
+      font-size: 1.2em;
+      font-weight: bold;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 6px 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #e0e0e0;
+    }
+    canvas {
+      margin-top: 20px;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 WebExcel Data Viewer & Auto Pivot Charts</h1>
   <div id="csv-container">Loading CSV files...</div>
-</section>
 
-<script>
-const repoOwner = "chanderGitHub";   // your GitHub username
-const repoName  = "webexcel";        // your repository name
-const branch    = "main";            // usually main or master
+  <script>
+  const repoOwner = "chanderGitHub";   // your GitHub username
+  const repoName  = "webexcel";        // your repository name
+  const branch    = "main";            // branch name
 
-async function loadCSVFiles() {
-  const container = document.getElementById("csv-container");
-  try {
-    // Get list of files in the repository root
-    const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/`;
-    const response = await fetch(apiUrl);
-    const files = await response.json();
+  async function loadCSVFiles() {
+    const container = document.getElementById("csv-container");
+    try {
+      const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/`;
+      const response = await fetch(apiUrl);
+      const files = await response.json();
+      const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
 
-    // Filter for .csv files
-    const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
-
-    if (csvFiles.length === 0) {
-      container.innerHTML = "<p>No CSV files found in repository root.</p>";
-      return;
-    }
-
-    container.innerHTML = ""; // Clear loading text
-
-    // Display each CSV file as a collapsible table
-    for (const file of csvFiles) {
-      const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${file.name}`;
-      const section = document.createElement("section");
-      section.style.marginBottom = "30px";
-
-      section.innerHTML = `
-        <details>
-          <summary style="cursor:pointer; font-size:1.2em; font-weight:bold;">
-            📄 ${file.name}
-          </summary>
-          <div id="table-${file.name}" style="overflow-x:auto; margin-top:10px;"></div>
-        </details>
-      `;
-      container.appendChild(section);
-
-      // Fetch and display CSV content
-      const csvText = await fetch(rawUrl).then(r => r.text());
-      const rows = csvText.trim().split("\n").map(r => r.split(","));
-      let html = "<table border='1' cellpadding='6' style='border-collapse:collapse; width:100%; text-align:left; background-color:rgba(255,255,255,0.8);'>";
-      html += "<tr>" + rows[0].map(h => `<th>${h}</th>`).join("") + "</tr>";
-      for (let i = 1; i < rows.length; i++) {
-        html += "<tr>" + rows[i].map(c => `<td>${c}</td>`).join("") + "</tr>";
+      if (csvFiles.length === 0) {
+        container.innerHTML = "<p>No CSV files found.</p>";
+        return;
       }
-      html += "</table>";
 
-      document.getElementById(`table-${file.name}`).innerHTML = html;
+      container.innerHTML = ""; // clear loading text
+
+      for (const file of csvFiles) {
+        const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${file.name}`;
+        const section = document.createElement("section");
+        section.innerHTML = `
+          <details open>
+            <summary>📄 ${file.name}</summary>
+            <div id="table-${file.name}" style="overflow-x:auto;"></div>
+            <canvas id="chart-${file.name}" height="300"></canvas>
+          </details>
+        `;
+        container.appendChild(section);
+
+        const csvText = await fetch(rawUrl).then(r => r.text());
+        const rows = csvText.trim().split("\n").map(r => r.split(","));
+        const headers = rows[0];
+        const dataRows = rows.slice(1);
+
+        // --- Display Table ---
+        let html = "<table><tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>";
+        for (const row of dataRows) {
+          html += "<tr>" + row.map(c => `<td>${c}</td>`).join("") + "</tr>";
+        }
+        html += "</table>";
+        document.getElementById(`table-${file.name}`).innerHTML = html;
+
+        // --- Generate Pivot Chart (counts by first column) ---
+        const categoryIndex = 0; // you can change this if needed
+        const valueCounts = {};
+        dataRows.forEach(row => {
+          const category = row[categoryIndex].trim();
+          if (!category) return;
+          valueCounts[category] = (valueCounts[category] || 0) + 1;
+        });
+
+        const labels = Object.keys(valueCounts);
+        const values = Object.values(valueCounts);
+
+        new Chart(document.getElementById(`chart-${file.name}`), {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [{
+              label: `Count by ${headers[categoryIndex]}`,
+              data: values,
+              backgroundColor: "rgba(54, 162, 235, 0.6)",
+              borderColor: "rgba(54, 162, 235, 1)",
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } }
+          }
+        });
+      }
+    } catch (err) {
+      container.innerHTML = `<p style="color:red;">Error loading CSV files: ${err.message}</p>`;
     }
-  } catch (err) {
-    container.innerHTML = `<p style="color:red;">Error loading CSV files: ${err.message}</p>`;
   }
-}
 
-loadCSVFiles();
-</script>
+  loadCSVFiles();
+  </script>
+</body>
+</html>
