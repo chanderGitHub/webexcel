@@ -1,17 +1,63 @@
-<section style="padding:20px;">
-  <h2>📈 Data Preview</h2>
-  <table id="csv-table" border="1" cellpadding="8" style="border-collapse:collapse; width:100%; text-align:left;"></table>
+<section style="padding:30px;">
+  <h2>📁 CSV Files from Repository</h2>
+  <div id="csv-container">Loading CSV files...</div>
 </section>
 
 <script>
-fetch("https://raw.githubusercontent.com/chandergithub/my-files/main/data.csv")
-  .then(response => response.text())
-  .then(data => {
-    const rows = data.split("\n").map(r => r.split(","));
-    let html = "<tr>" + rows[0].map(h => `<th>${h}</th>`).join("") + "</tr>";
-    for (let i = 1; i < rows.length; i++) {
-      html += "<tr>" + rows[i].map(c => `<td>${c}</td>`).join("") + "</tr>";
+const repoOwner = "chanderGitHub";   // your GitHub username
+const repoName  = "webexcel";        // your repository name
+const branch    = "main";            // usually main or master
+
+async function loadCSVFiles() {
+  const container = document.getElementById("csv-container");
+  try {
+    // Get list of files in the repository root
+    const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/`;
+    const response = await fetch(apiUrl);
+    const files = await response.json();
+
+    // Filter for .csv files
+    const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
+
+    if (csvFiles.length === 0) {
+      container.innerHTML = "<p>No CSV files found in repository root.</p>";
+      return;
     }
-    document.getElementById("csv-table").innerHTML = html;
-  });
+
+    container.innerHTML = ""; // Clear loading text
+
+    // Display each CSV file as a collapsible table
+    for (const file of csvFiles) {
+      const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${file.name}`;
+      const section = document.createElement("section");
+      section.style.marginBottom = "30px";
+
+      section.innerHTML = `
+        <details>
+          <summary style="cursor:pointer; font-size:1.2em; font-weight:bold;">
+            📄 ${file.name}
+          </summary>
+          <div id="table-${file.name}" style="overflow-x:auto; margin-top:10px;"></div>
+        </details>
+      `;
+      container.appendChild(section);
+
+      // Fetch and display CSV content
+      const csvText = await fetch(rawUrl).then(r => r.text());
+      const rows = csvText.trim().split("\n").map(r => r.split(","));
+      let html = "<table border='1' cellpadding='6' style='border-collapse:collapse; width:100%; text-align:left; background-color:rgba(255,255,255,0.8);'>";
+      html += "<tr>" + rows[0].map(h => `<th>${h}</th>`).join("") + "</tr>";
+      for (let i = 1; i < rows.length; i++) {
+        html += "<tr>" + rows[i].map(c => `<td>${c}</td>`).join("") + "</tr>";
+      }
+      html += "</table>";
+
+      document.getElementById(`table-${file.name}`).innerHTML = html;
+    }
+  } catch (err) {
+    container.innerHTML = `<p style="color:red;">Error loading CSV files: ${err.message}</p>`;
+  }
+}
+
+loadCSVFiles();
 </script>
