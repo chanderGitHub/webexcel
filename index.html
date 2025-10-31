@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebExcel Viewer</title>
+  <title>WebExcel Viewer & Pivot Charts</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -39,6 +39,12 @@
     th {
       background-color: #e0e0e0;
     }
+    select {
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #888;
+    }
     canvas {
       margin-top: 20px;
       max-width: 100%;
@@ -46,7 +52,7 @@
   </style>
 </head>
 <body>
-  <h1>📊 WebExcel Data Viewer & Auto Pivot Charts</h1>
+  <h1>📊 WebExcel Data Viewer & Interactive Pivot Charts</h1>
   <div id="csv-container">Loading CSV files...</div>
 
   <script>
@@ -76,6 +82,8 @@
           <details open>
             <summary>📄 ${file.name}</summary>
             <div id="table-${file.name}" style="overflow-x:auto;"></div>
+            <label for="select-${file.name}">Choose column for chart:</label>
+            <select id="select-${file.name}"></select>
             <canvas id="chart-${file.name}" height="300"></canvas>
           </details>
         `;
@@ -94,35 +102,55 @@
         html += "</table>";
         document.getElementById(`table-${file.name}`).innerHTML = html;
 
-        // --- Generate Pivot Chart (counts by first column) ---
-        const categoryIndex = 0; // you can change this if needed
-        const valueCounts = {};
-        dataRows.forEach(row => {
-          const category = row[categoryIndex].trim();
-          if (!category) return;
-          valueCounts[category] = (valueCounts[category] || 0) + 1;
+        // --- Populate dropdown ---
+        const select = document.getElementById(`select-${file.name}`);
+        headers.forEach((h, i) => {
+          const opt = document.createElement("option");
+          opt.value = i;
+          opt.textContent = h;
+          select.appendChild(opt);
         });
 
-        const labels = Object.keys(valueCounts);
-        const values = Object.values(valueCounts);
+        // --- Chart generation function ---
+        const ctx = document.getElementById(`chart-${file.name}`);
+        let chartInstance = null;
 
-        new Chart(document.getElementById(`chart-${file.name}`), {
-          type: "bar",
-          data: {
-            labels: labels,
-            datasets: [{
-              label: `Count by ${headers[categoryIndex]}`,
-              data: values,
-              backgroundColor: "rgba(54, 162, 235, 0.6)",
-              borderColor: "rgba(54, 162, 235, 1)",
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: { y: { beginAtZero: true } }
-          }
-        });
+        function drawChart(columnIndex) {
+          const valueCounts = {};
+          dataRows.forEach(row => {
+            const category = row[columnIndex]?.trim();
+            if (!category) return;
+            valueCounts[category] = (valueCounts[category] || 0) + 1;
+          });
+
+          const labels = Object.keys(valueCounts);
+          const values = Object.values(valueCounts);
+
+          if (chartInstance) chartInstance.destroy();
+          chartInstance = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: labels,
+              datasets: [{
+                label: `Count by ${headers[columnIndex]}`,
+                data: values,
+                backgroundColor: "rgba(54, 162, 235, 0.6)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true } }
+            }
+          });
+        }
+
+        // Default: first column
+        drawChart(0);
+
+        // Update chart when user changes column
+        select.addEventListener("change", e => drawChart(parseInt(e.target.value)));
       }
     } catch (err) {
       container.innerHTML = `<p style="color:red;">Error loading CSV files: ${err.message}</p>`;
